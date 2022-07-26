@@ -48,7 +48,7 @@ simu_design_matrix = function(n=1000, pmain = 10, rho = 0,sigma = 1, H_scale = F
   
   main_obj = simu_main_var(n, pmain, rho, sigma)
   X = main_obj$main
-  order2_obj = generate_order2_from_main(main)
+  order2_obj = generate_order2_from_main(X)
   interac = order2_obj$interac
   quadra = order2_obj$quadra
   if(nrow(interac) == 0) {X = cbind(main,quadra)}
@@ -71,7 +71,6 @@ simu_design_matrix = function(n=1000, pmain = 10, rho = 0,sigma = 1, H_scale = F
 }
 
 compute_design_proj_matrix = function(design, pmain){
-  q =  (pmain) * (pmain+1)/2
   design_proj = design
   for (j in ((pmain+1):(pmain + (pmain) * (pmain+1)/2))){
     model_j = lm(design[,j]~as.matrix(design[,1:pmain]))
