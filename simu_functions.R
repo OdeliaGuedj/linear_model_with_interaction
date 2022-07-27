@@ -13,17 +13,15 @@ simu_main_var = function(n = 1000, pmain = 10, rho = 0, sigma = 1, compute_mean_
   {
     means_main = NULL
     sds_main = NULL}
-  return(list(main = as.data.frame(main), means_main = means_main, sds_main = sds_main, Sigma = Sigma))
+  return(list(X = as.data.frame(main), means_X = means_main, sds_X = sds_main, Sigma = Sigma))
 }
 
-generate_order2_from_main = function(main){
-  pmain = ncol(main)
-  quadra = sapply(1:pmain, function(i){main[,i] * main[,i]})
+generate_order2_from_main = function(X){
+  pmain = ncol(X)
+  quadra = sapply(1:pmain, function(i){X[,i] * X[,i]})
   colnames(quadra) = make_quadra_names(pmain)
   if(pmain == 1){
     interac = NULL
-    means_main = mean(as.matrix(main))
-    sds_main = sd(as.matrix(main))
     means_interac = NULL
     sds_interac = NULL
     means_quadra = mean(quadra)
@@ -31,57 +29,47 @@ generate_order2_from_main = function(main){
   }
   else if(pmain > 1){
       names_interac = make_interac_names(pmain)
-      interac = sapply(1:nrow(names_interac),FUN = function(i){main[,names_interac[i,1]] * main[,names_interac[i,2]]})
+      interac = sapply(1:nrow(names_interac),FUN = function(i){X[,names_interac[i,1]] * X[,names_interac[i,2]]})
       colnames(interac) = names_interac[,3]
-      means_main = apply(main,2,mean)
-      sds_main = apply(main,2,sd)
       means_interac = apply(interac,2,mean)
       sds_interac = apply(interac,2,sd)
       means_quadra = apply(quadra,2,mean)
       sds_quadra = apply(quadra,2,sd)
   }
   
-  return(list(interac = as.data.frame(interac), quadra = as.data.frame(quadra), means_interac = means_interac, sds_interac = sds_interac, means_quadra = means_quadra, sds_quadra = sds_quadra))
+  return(list(Z = as.matrix(cbind(interac,quadra)), means_Z = c(means_interac,means_quadra), sds_Z= c(sds_interac, sds_quadra)))
 }
 
 simu_design_matrix = function(n=1000, pmain = 10, rho = 0,sigma = 1, H_scale = F, ordinary_scale = F){
-  
   main_obj = simu_main_var(n, pmain, rho, sigma)
-  X = main_obj$main
+  X = main_obj$X
   order2_obj = generate_order2_from_main(X)
-  interac = order2_obj$interac
-  quadra = order2_obj$quadra
-  if(nrow(interac) == 0) {X = cbind(main,quadra)}
-  else
-  {design = cbind(X,interac,quadra)}
-  means = c(order2_obj$means_main, order2_obj$means_interac, order2_obj$means_quadra)
-  sds = c(order2_obj$sds_main, order2_obj$sds_interac, order2_obj$sds_quadra)
-
-  if(ordinary_scale){design_s = scale(design)} else {design_s = NULL}
+  xtilde = as.matrix(cbind(X,order2_obj$Z))
+  if(ordinary_scale){xtilde_s = as.matrix(scale(xtilde))} else {xtilde_s = NULL}
   if(H_scale == T){
     X_s = scale(X)
     order2_obj_s = generate_order2_from_main(X_s)
-    interac_s = order2_obj_s$interac
-    quadra_s = order2_obj_s$quadra
-    design_Hs = as.data.frame(cbind(X_s,interac_s,quadra_s))
+    design_Hs = as.matrix(cbind(X_s,Z_s = order2_obj_s$Z))
   }
-  else{design_Hs = NULL}
+  else{xtilde_Hs = NULL}
 
-  return(list(design=design, design_Hs=design_Hs, design_s = design_s, X = X, means = means, sds = sds, rho = rho))
+  return(list(xtilde=xtilde, xtilde_Hs=xtilde_Hs, xtilde_s = xtilde_s, pmain=pmain, means = c(order2_obj$means_X, order2_obj$means_Z),
+              sds = c(order2_obj$sds_X, order2_obj$sds_Z), rho = rho))
 }
 
-compute_design_proj_matrix = function(design, pmain){
-  design_proj = design
+compute_design_proj_matrix = function(xtilde, pmain){
+  xtilde_proj = xtilde
   for (j in ((pmain+1):(pmain + (pmain) * (pmain+1)/2))){
-    model_j = lm(design[,j]~as.matrix(design[,1:pmain]))
-    design_proj[,j] = design_proj[,j] - predict(model_j)
+    model_j = lm(xtilde[,j]~xtilde[,1:pmain])
+    xtilde_proj[,j] = xtilde_proj[,j] - predict(model_j)
   }
-  return(design_proj)
+  return(xtilde_proj)
 }
 
 # 2. Simu a quadratic model with strong or weak hierarchy
-
-simu_quadraGauss_output = function(design, pmain, nb = 3, heredity = "strong", SNR=10,noise_sd = NULL, main_idx_sample = NULL, true_beta = NULL){
+simu_quadraGauss_output = function(design, pmain, nb = 3, heredity = "strong",
+                                   SNR=10,noise_sd = NULL, main_idx_sample = NULL, 
+                                   true_beta = NULL){
   if(is.null(true_beta)){
     true_beta = rep(0, ncol(design))
     names(true_beta) = colnames(design)
@@ -101,18 +89,18 @@ simu_quadraGauss_output = function(design, pmain, nb = 3, heredity = "strong", S
       true_beta[c(non_0_main_idx,non_0_order2_idx)] = 1
     }
   }
-  if(is.null(noise_sd)){noise_sd = set_sigma_from_SNR(SNR = SNR, design = as.matrix(design), beta = true_beta)}
-  else{SNR = compute_snr(noise_sd = noise_sd, design = as.matrix(design), beta = true_beta)}
+  if(is.null(noise_sd)){noise_sd = set_sigma_from_SNR(SNR = SNR, design = design, beta = true_beta)}
+  else{SNR = compute_snr(noise_sd = noise_sd, design = design, beta = true_beta)}
   epsilon = rnorm(n = nrow(design), mean = 0, sd = noise_sd)
   Y = as.matrix(design)%*%true_beta + epsilon
   return(list(Y = Y,true_beta = true_beta, SNR = as.numeric(SNR), noise_sd = as.numeric(noise_sd)))
 }
  
-simu_quadraGaussian = function(n = 1000, pmain = 10, rho = 0, sigma = 1, heredity, 
+simu_quadraGaussian = function(n = 1000, pmain = 10, rho = 0, sigma = 1, heredity = "strong", 
                          SNR = 10, noise_sd = NULL, H_scale = F, ordinary_scale = F, nb = 3, 
-                         true_beta = NULL, sample = NULL){
+                         true_beta = NULL, main_idx_sample = NULL){
   design_obj = simu_design_matrix(n = n, pmain = pmain, rho = rho, sigma = sigma, H_scale = H_scale, ordinary_scale = ordinary_scale)
-  output_obj = simu_quadraGauss_output(X = design$X, pmain = ncol(design$main), nb = nb, heredity = heredity, SNR=SNR, noise_sd = noise_sd, true_beta = true_beta, sample = sample)
+  output_obj = simu_quadraGauss_output(design = design_obj$xtilde, pmain = design_obj$pmain, nb = nb, heredity = heredity, SNR=SNR, noise_sd = noise_sd, true_beta = true_beta, main_idx_sample = main_idx_sample)
   return(list(design_obj = design_obj, output_obj = output_obj))
 } 
   
@@ -128,8 +116,8 @@ make_quadra_names = function(pmain){
   return(num_names)
 }
 get_col_number = function(p){return((p*(p-1))/2 + 2*p)}
-set_sigma_from_SNR = function(SNR,X,beta){
-  return(sqrt(var(X%*%beta))/SNR)}
+set_sigma_from_SNR = function(SNR,design,beta){
+  return(sqrt(var(design%*%beta))/SNR)}
 
 compute_snr = function(noise_sd,design,beta){
   return(var(design%*%beta)/(noise_sd)**2)
