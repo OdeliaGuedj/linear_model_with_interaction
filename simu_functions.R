@@ -49,7 +49,7 @@ simu_design_matrix = function(n=1000, pmain = 10, rho = 0,sigma = 1, H_scale = F
   if(H_scale == T){
     X_s = scale(X)
     order2_obj_s = generate_order2_from_main(X_s)
-    design_Hs = as.matrix(cbind(X_s,Z_s = order2_obj_s$Z))
+    xtilde_Hs = as.matrix(cbind(X_s,Z_s = order2_obj_s$Z))
   }
   else{xtilde_Hs = NULL}
 
