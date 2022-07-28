@@ -1,6 +1,6 @@
 # 1. Simu the design matrix 
 
-simu_main_var = function(n = 1000, pmain = 10, rho = 0, sigma = 1, compute_mean_sd = F){
+simu_main_var = function(n = 1000, pmain = 10, rho = 0, sigma = 1, compute_mean_sd = T){
   create_cor = function(i){return(rho**(i-1)*sigma^2)}
   vec = sapply(c(1:pmain), FUN = create_cor)
   Sigma = lqmm::make.positive.definite(toeplitz(vec))
@@ -41,7 +41,7 @@ generate_order2_from_main = function(X){
 }
 
 simu_design_matrix = function(n=1000, pmain = 10, rho = 0,sigma = 1, H_scale = F, ordinary_scale = F){
-  main_obj = simu_main_var(n, pmain, rho, sigma)
+  main_obj = simu_main_var(n, pmain, rho, sigma, compute_mean_sd = T)
   X = main_obj$X
   order2_obj = generate_order2_from_main(X)
   xtilde = as.matrix(cbind(X,order2_obj$Z))
@@ -53,8 +53,8 @@ simu_design_matrix = function(n=1000, pmain = 10, rho = 0,sigma = 1, H_scale = F
   }
   else{xtilde_Hs = NULL}
 
-  return(list(xtilde=xtilde, xtilde_Hs=xtilde_Hs, xtilde_s = xtilde_s, pmain=pmain, means = c(order2_obj$means_X, order2_obj$means_Z),
-              sds = c(order2_obj$sds_X, order2_obj$sds_Z), rho = rho))
+  return(list(xtilde=xtilde, xtilde_Hs=xtilde_Hs, xtilde_s = xtilde_s, pmain=pmain, means = c(main_obj$means_X, order2_obj$means_Z),
+              sds = c(main_obj$sds_X, order2_obj$sds_Z), rho = rho))
 }
 
 compute_design_proj_matrix = function(xtilde, pmain){
