@@ -97,7 +97,7 @@ simu_quadraGauss_output = function(design, pmain, nb = 3, heredity = "strong",
 }
  
 simu_quadraGaussian = function(n = 1000, pmain = 10, rho = 0, sigma = 1, heredity = "strong", 
-                         SNR = 10, noise_sd = NULL, H_scale = F, ordinary_scale = F, nb = 3, 
+                         SNR = 10, noise_sd = NULL, H_scale = T, ordinary_scale = T, nb = 3, 
                          true_beta = NULL, main_idx_sample = NULL){
   design_obj = simu_design_matrix(n = n, pmain = pmain, rho = rho, sigma = sigma, H_scale = H_scale, ordinary_scale = ordinary_scale)
   output_obj = simu_quadraGauss_output(design = design_obj$xtilde, pmain = design_obj$pmain, nb = nb, heredity = heredity, SNR=SNR, noise_sd = noise_sd, true_beta = true_beta, main_idx_sample = main_idx_sample)
@@ -123,7 +123,33 @@ compute_snr = function(noise_sd,design,beta){
   return(var(design%*%beta)/(noise_sd)**2)
 }
 
-create_partition = function(p_train = 0.7, p_test = 0.15, p_valid = 0.15, n){
-  splitSample = sample(1:3, size=n, prob=c(p_train,p_test,p_valid), replace = TRUE)
-  return(splitSample)
+find_best_lambda = function(x_train,y_train,x_valid,y_valid, standardize = T, method = c(1,2,3)){
+  method_1 = function(){
+    x_train = rbind(x_train, x_valid)
+    y_train = c(y_train, y_valid)
+    lambda_min = glmnet::cv.glmnet(as.matrix(x_train),y_train,alpha=1,standardize =standardize)$lambda.min
+    return(lambda_min)}
+  
+  method_2 = function(){
+    lambda_to_try = glmnet::glmnet(as.matrix(x_train),y_train,alpha=1,standardize =standardize)$lambda
+    l = length(lambda_to_try)
+    RMSE = vector(length = l)
+    for(i in 1:l){
+      model = glmnet::glmnet(as.matrix(x_train), y_train,alpha = 1, lambda = lambda_to_try[i], standardize = standardize)
+      prediction = predict(model, s = lambda_to_try[i], newx = as.matrix(x_valid))
+      RMSE[i] = compute_RMSE(y_valid,prediction)}
+    res = cbind(lambda_to_try,unlist(RMSE))
+    lambda_min = res[which.min(res[,2]),1]
+    return(lambda_min)}
+  
+  method_3 = function(){
+    lambda_min = glmnet::cv.glmnet(as.matrix(x_valid),y_valid,alpha=1,standardize = standardize)$lambda.min
+    return(lambda_min)}
+  
+  lambda_min_1 = ifelse(1 %in% method, method_1(), NA)
+  lambda_min_2 = ifelse(2 %in% method, method_2(), NA)
+  lambda_min_3 = ifelse(3 %in% method, method_3(), NA)
+  
+  return(list(lambda_min_1 = lambda_min_1,lambda_min_2 = lambda_min_2, lambda_min_3 = lambda_min_3))
 }
+

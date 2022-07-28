@@ -52,7 +52,7 @@ compute_main_coverage = function(true_beta,fitted_beta,pmain){
 compute_order2_coverage = function(true_beta,fitted_beta,pmain){
   true_order2_coeff = true_beta[(pmain+1):length(true_beta)]
   fitted_order2_coeff = fitted_beta[(pmain+1):length(fitted_beta)]
-  names(true_order2_coeff) = c(make_interac_names(pmain),make_quadra_names(pmain))
+  names(true_order2_coeff) = c(make_interac_names(pmain)[,3],make_quadra_names(pmain))
   names(fitted_order2_coeff) = names(true_order2_coeff)
   activ_true_order2_coeff = unname(which(true_order2_coeff != 0))
   activ_fitted_order2_coeff = unname(which(fitted_order2_coeff != 0))
@@ -80,7 +80,7 @@ compute_main_exact_select = function(true_beta,fitted_beta,pmain){
 compute_order2_exact_select = function(true_beta,fitted_beta,pmain){
   true_order2_coeff = true_beta[(pmain+1):length(true_beta)]
   fitted_order2_coeff = fitted_beta[(pmain+1):length(fitted_beta)]
-  names(true_order2_coeff) = c(make_interac_names(pmain),make_quadra_names(pmain))
+  names(true_order2_coeff) = c(make_interac_names(pmain)[,3],make_quadra_names(pmain))
   names(fitted_order2_coeff) = names(true_order2_coeff)
   activ_true_order2_coeff = unname(which(true_order2_coeff != 0))
   activ_fitted_order2_coeff = unname(which(fitted_order2_coeff != 0))
@@ -90,6 +90,7 @@ compute_order2_exact_select = function(true_beta,fitted_beta,pmain){
     order2.exact.select = 0
   return(order2.exact.select)
 }
+
 
 compute_model_size = function(fitted_beta){
   return(length(which(fitted_beta!=0)))
