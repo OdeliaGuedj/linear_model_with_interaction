@@ -5,6 +5,7 @@ The files:
 - simu_functions.R contains 12 functions needed to simulate a Gaussian model allowing order 2 interactions and preserving the strong or weak hierarchy principle.
 - eval_algo_performance_functions.R contains 11 functions including 8 computing indicators of the performance of an algorithm (both in prediction and selection) such as the AUC, the RMSE, ...
 - data_simulations.R contains a parallelized version of the main simulation function: simu_quadraGaussian(), and the code used to simulate all of our settings. Be aware that the function _mcapply()_ was used and it does'nt not work on Windows !
+- HierarchicalDescalingChenetal2020.R contains the implementation of the method of Chen et al (2020): *An Easy-to-Implement Hierarchical Standardization for Variable Selection Under Strong Heredity Constraint. Journal of statistical theory and practice, 14(3), 1-32*
 
 ## Data simulation: an example
 
