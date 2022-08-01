@@ -7,6 +7,7 @@ The files:
 - data_simulations.R contains a parallelized version of the main simulation function: simu_quadraGaussian(), and the code used to simulate all of our settings. Be aware that the function _mcapply()_ was used and it does'nt not work on Windows !
 - HierarchicalDescalingChenetal2020.R contains the implementation of the method of Chen et al (2020): *An Easy-to-Implement Hierarchical Standardization for Variable Selection Under Strong Heredity Constraint. Journal of statistical theory and practice, 14(3), 1-32*
 - withdraw_proj.R $${X_jX_k}_{proj} = X_jX_k - P_{X}(X_jX_k)$$
+- compare_algo_functions.R is the file containing a function comparing several algorithms performing variable selection and prediction in a quadratic linear regression.
 
 ## Data simulation: an example
 
