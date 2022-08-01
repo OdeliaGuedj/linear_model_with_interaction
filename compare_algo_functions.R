@@ -1,9 +1,11 @@
 compare_algo_quadraGaussian = function(design_obj, output_obj){
   
-  nb = length(output_obj$true_beta[which(output_obj$true_beta[1:design_obj$pmain] !=0) ])
   true_beta = output_obj$true_beta
   pmain = design_obj$pmain
+  non_0_main_idx = which(true_beta[1:pmain] != 0)
+  nb = length(non_0_main_idx)
   n = nrow(design_obj$xtilde)
+  noise_sd = output_obj$noise_sd
   
   RMSE = matrix(nrow = 1, ncol = 9); MSH = matrix(nrow = 1, ncol = 9); 
   sensitivity = matrix(nrow = 1, ncol = 9); specificity = matrix(nrow = 1, ncol = 9); 
@@ -18,9 +20,11 @@ compare_algo_quadraGaussian = function(design_obj, output_obj){
   colnames(order2_coverage) = algo_names; colnames(main_exact_select) = algo_names; 
   colnames(order2_exact_select) = algo_names; colnames(model_size) = algo_names; colnames(times_) = algo_names;
 
+  xtilde_proj = withdraw_proj(xtilde = design_obj$xtilde, pmain = design_obj$pmain)
   trainIndex = caret::createDataPartition(1:n, p=0.8, list=FALSE)
   x_train = as.data.frame(design_obj$xtilde[trainIndex,1:pmain]); x_test = as.data.frame(design_obj$xtilde[-trainIndex,1:pmain]);
   xtilde_train = as.data.frame(design_obj$xtilde[trainIndex,]); xtilde_test = as.data.frame(design_obj$xtilde[-trainIndex,]);
+  xtilde_proj_train = as.data.frame(xtilde_proj[trainIndex,]); xtilde_proj_test = as.data.frame(xtilde_proj[-trainIndex,]);
   xtilde_Hs_train = as.data.frame(design_obj$xtilde_Hs[trainIndex,]); xtilde_Hs_test = as.data.frame(design_obj$xtilde_Hs[-trainIndex,]);
   y_train = output_obj$Y[trainIndex]; y_test = output_obj$Y[-trainIndex];
   
@@ -69,18 +73,19 @@ compare_algo_quadraGaussian = function(design_obj, output_obj){
   order2_exact_select[1,"All Pairs LASSO"] = compute_order2_exact_select(true_beta = true_beta, fitted_beta = all_pair_lasso_beta,pmain = pmain)
   model_size[1,"All Pairs LASSO"] = compute_model_size(fitted_beta = all_pair_lasso_beta)
   
-  #Hds LASSO
+  # Hds LASSO
   print("Hds LASSO Chen et al 2020")
   start_time = Sys.time()
   lambda_min_HdsLASSO = find_best_lambda(x_train = xtilde_Hs_train,
                                          y_train = y_train,
-                                         x_valid = xtilde_Hs_test[1:floor(0.5*n),],
-                                         y_valid = y_test[1:floor(0.5*n)],
+                                         x_valid = xtilde_Hs_test[1:floor(0.5*nrow(xtilde_Hs_test)),],
+                                         y_valid = y_test[1:floor(0.5*nrow(xtilde_Hs_test))],
                                          method = 2)$lambda_min_2
   HdS_lasso_fit = glmnet::glmnet(as.matrix(xtilde_Hs_train),y_train,alpha=1,standardize =F, lambda = lambda_min_HdsLASSO)
-  HdS_lasso_beta = HdS(simu_$data,HdS_lasso_fit$beta)
+  HdS_lasso_beta = HdS(design_obj,HdS_lasso_fit$beta)
   HdS_lasso_fit$beta = as.matrix(HdS_lasso_beta)
-  HdS_lasso_predict = predict(HdS_lasso_fit, s = lambda_min_HdsLASSO, newx = as.matrix(x_H_s_test))
+  
+  HdS_lasso_predict = predict(HdS_lasso_fit, s = lambda_min_HdsLASSO, newx = as.matrix(xtilde_Hs_test))
   end_time = Sys.time()
   times_[1,"HdS LASSO"] = as.numeric(end_time-start_time)
   RMSE[1,"HdS LASSO"] =  compute_RMSE(y_test,HdS_lasso_predict)
@@ -99,12 +104,12 @@ compare_algo_quadraGaussian = function(design_obj, output_obj){
   #RAMP
   print("RAMP Hao et al 2016")
   start_time = Sys.time()
-  ramp_fit = RAMP::RAMP(main_train,y_train)
+  ramp_fit = RAMP::RAMP(scale(x_train,T,T),y_train)
   ramp_beta = rep(0,get_col_number(pmain))
   names(ramp_beta) = names(true_beta)
   ramp_beta[ramp_fit$mainInd] = ramp_fit$beta.m
   ramp_beta[trimws(gsub("X"," ",ramp_fit$interInd),"l")] = ramp_fit$beta.i
-  ramp_predict = predict(ramp_fit, newdata = main_test)
+  ramp_predict = predict(ramp_fit, newdata = x_test)
   end_time = Sys.time()
   times_[1,"RAMP"] = as.numeric(end_time-start_time)
   RMSE[1,"RAMP"] =  compute_RMSE(y_test,ramp_predict)
@@ -123,13 +128,13 @@ compare_algo_quadraGaussian = function(design_obj, output_obj){
   #HierNet
   print("HierNet Bien et al 2013")
   start_time = Sys.time()
-  lambda_min_HierNet = hierNet::hierNet.cv(hierNet::hierNet.path(scale(main_train,T,T),y_train),scale(main_train,T,T),y_train, trace =0)$lamhat.1se
-  hiernet_fit = hierNet::hierNet(scale(main_train,T,T),y_train,lam=lambda_min_HierNet,strong = strong_hiernet, trace = 0)
+  lambda_min_HierNet = hierNet::hierNet.cv(hierNet::hierNet.path(scale(x_train,T,T),y_train),scale(x_train,T,T),y_train, trace =0)$lamhat.1se
+  hiernet_fit = hierNet::hierNet(scale(x_train,T,T),y_train,lam=lambda_min_HierNet,strong = T, trace = 0)
   hiernet_beta = c(hiernet_fit$bp - hiernet_fit$bn,
-                   sapply(1:dim(interac_names)[1],function(i) hiernet_fit$th[interac_names[i,1],interac_names[i,2]]) ,
+                   sapply(1:dim(interac_names)[1],function(i) hiernet_fit$th[as.numeric(interac_names[i,1]),as.numeric(interac_names[i,2])]) ,
                    diag(hiernet_fit$th))
   names(hiernet_beta) = c(1:pmain, interac_names[,3], quadra_names)
-  hiernet_predict = predict(hiernet_fit,scale(main_test,T,T))
+  hiernet_predict = predict(hiernet_fit,scale(x_test,T,T))
   end_time = Sys.time()
   times_[1,"HierNet"] = as.numeric(end_time-start_time)
   RMSE[1,"HierNet"] =  compute_RMSE(y_test,hiernet_predict)
@@ -149,28 +154,28 @@ compare_algo_quadraGaussian = function(design_obj, output_obj){
   print("FAMILY Harris et al 2016")
   W_test = c()
   W_train = c()
-  # !!!!!!!! BOUCLES Comment faire mieux ??
-  main_s_train = scale(main_train, scale = F)
-  main_s_test = scale(main_test, scale = F)
+  # following the authors' instructions for use
+  x_s_train = scale(x_train, scale = F)
+  x_s_test = scale(x_test, scale = F)
   for(i in 1:(pmain+1)){
     for(j in 1:(pmain+1)){
-      W_test =  cbind(W_test,cbind(1,main_s_test)[,j]*cbind(1,main_s_test)[,i])
-      W_train = cbind(W_train,cbind(1,main_s_train)[,j]*cbind(1,main_s_train)[,i])
+      W_test =  cbind(W_test,cbind(1,x_s_test)[,j]*cbind(1,x_s_test)[,i])
+      W_train = cbind(W_train,cbind(1,x_s_train)[,j]*cbind(1,x_s_train)[,i])
     }
   }
   B = matrix(0,ncol = pmain+1,nrow = pmain+1)
   rownames(B)<- c("inter" , 1:(nrow(B)-1))
   colnames(B)<- c("inter" , 1:(nrow(B)-1))
-  B[apply(sapply(sample_, function(i) i== colnames(B)), 2, function(i) which(i == T)),] = rep(1,(pmain+1))
-  B[,apply(sapply(sample_, function(i) i== colnames(B)), 2, function(i) which(i == T))] = rep(1,(pmain+1))
+  B[apply(sapply(non_0_main_idx, function(i) i== colnames(B)), 2, function(i) which(i == T)),] = rep(1,(pmain+1))
+  B[,apply(sapply(non_0_main_idx, function(i) i== colnames(B)), 2, function(i) which(i == T))] = rep(1,(pmain+1))
   Y_train_FAMILY = as.vector(W_train%*%as.vector(B)+rnorm(nrow(W_train),sd = noise_sd))
   Y_test_FAMILY = as.vector(W_test%*%as.vector(B)+rnorm(nrow(W_test),sd = noise_sd))
   
   alphas = c(0.01,0.5,0.99)
   lambdas = seq(0.1,1,length = 50)
   start_time = Sys.time()
-  family_fit =  FAMILY(main_s_train, main_s_train, Y_train_FAMILY, lambdas ,alphas, quad = T,iter=500, verbose = TRUE )
-  family_all_pred=  predict(family_fit, as.matrix(main_s_test), as.matrix(main_s_test))
+  family_fit =  FAMILY::FAMILY(x_s_train, x_s_train, Y_train_FAMILY, lambdas ,alphas, quad = T,iter=500, verbose = TRUE )
+  family_all_pred=  predict(family_fit, as.matrix(x_s_test), as.matrix(x_s_test))
   mse_family = apply(family_all_pred,c(2,3), "-" ,Y_test_FAMILY)
   mse_family =  apply(mse_family^2,c(2,3),sum)
   im = which(mse_family==min(mse_family),TRUE)
@@ -207,17 +212,17 @@ compare_algo_quadraGaussian = function(design_obj, output_obj){
   #PIE
   print("PIE Wang et al 2019")
   start_time = Sys.time()
-  main_beta = as.vector(coef(cv.glmnet(as.matrix(main_train),y_train),s="lambda.min"))[-1]
+  main_beta = as.vector(coef(cv.glmnet(as.matrix(x_train),y_train),s="lambda.min"))[-1]
   names(main_beta) = 1:pmain
-  coeff_PIE = PIE(main_train,y_train) # la cv est faites à l'intereieur par defaut avec une grille de 50 lambdas
+  coeff_PIE = PIE::PIE(x_train,y_train) # the cv is automatically done inside PIE() with a grid of 50 lambdas
   colnames(coeff_PIE) = 1:pmain
   rownames(coeff_PIE) = 1:pmain
   quadra_pie = diag(coeff_PIE)
-  names(quadra_pie) = make_quadra_names(pmain)
+  names(quadra_pie) = quadra_names
   coeff_PIE[lower.tri(coeff_PIE, diag = T)] = NA
   coeff_PIE = as.data.frame(as.matrix(coeff_PIE))
   coeff_PIE$r = rownames(coeff_PIE)
-  interac_pie = melt(coeff_PIE, na.rm = T, id.vars = "r", value.name = "coeff", variable.name = "c")
+  interac_pie = reshape2::melt(coeff_PIE, na.rm = T, id.vars = "r", value.name = "coeff", variable.name = "c")
   interac_pie$r = as.numeric(as.character(interac_pie$r))
   interac_pie$c = as.numeric(as.character(interac_pie$c))
   interac_pie_names = paste(interac_pie$r,interac_pie$c)
@@ -238,9 +243,63 @@ compare_algo_quadraGaussian = function(design_obj, output_obj){
   main_exact_select[1,"PIE"] = compute_main_exact_select(true_beta = true_beta, fitted_beta = pie_beta,pmain = pmain)
   order2_exact_select[1,"PIE"] = compute_order2_exact_select(true_beta = true_beta, fitted_beta = pie_beta,pmain = pmain)
   model_size[1,"PIE"] = compute_model_size(fitted_beta = pie_beta)
-  print("fini")
   
-  betas = cbind(true_beta, oracle_beta, all_pair_lasso_beta, HdS_lasso_beta, ramp_beta, hiernet_beta, family_beta, pie_beta)
+  #HierNetProj
+  print("HierNetProj")
+  start_time = Sys.time()
+  lambda_min_HierNetProj = hierNet::hierNet.cv(
+    hierNet::hierNet.path(scale(x_train,T,T),y_train, zz = as.matrix(xtilde_proj_train[,-c(1:pmain)]))
+    ,scale(x_train,T,T),y_train, trace =0)$lamhat.1se
+  HierNetProj_fit = hierNet::hierNet(scale(x_train,T,T),y_train,lam=lambda_min_HierNetProj,strong = T,zz = as.matrix(xtilde_proj_train[,-c(1:pmain)]), trace = 0)
+  HierNetProj_beta = c(HierNetProj_fit$bp - HierNetProj_fit$bn,
+                       sapply(1:dim(interac_names)[1],function(i) HierNetProj_fit$th[as.numeric(interac_names[i,1]),as.numeric(interac_names[i,2])]) ,
+                       diag(HierNetProj_fit$th))
+  names(HierNetProj_beta) = c(1:pmain, interac_names[,3], quadra_names)
+  HierNetProj_predict = predict(HierNetProj_fit,scale(x_test,T,T))
+  end_time = Sys.time()
+  times_[1,"HierNetProj"] = as.numeric(end_time-start_time)
+  RMSE[1,"HierNetProj"] =  compute_RMSE(y_test,HierNetProj_predict)
+  MSH[1,"HierNetProj"] =  compute_MSH(true_beta = true_beta ,fitted_beta = HierNetProj_beta, main_effects = nb, pmain = pmain)
+  performance = eval_performance(true_beta = true_beta, fitted_beta = HierNetProj_beta)
+  sensitivity[1,"HierNetProj"] = performance$sensitivity
+  specificity[1,"HierNetProj"] = performance$specificity
+  AUC[1,"HierNetProj"] = performance$auc
+  main_coverage[1,"HierNetProj"] = compute_main_coverage(true_beta = true_beta, fitted_beta = HierNetProj_beta,pmain = pmain)
+  order2_coverage[1,"HierNetProj"] = compute_order2_coverage(true_beta = true_beta, fitted_beta = HierNetProj_beta,pmain = pmain)
+  main_exact_select[1,"HierNetProj"] = compute_main_exact_select(true_beta = true_beta, fitted_beta = true_beta, pmain = pmain)
+  order2_exact_select[1,"HierNetProj"] = compute_order2_exact_select(true_beta = true_beta, fitted_beta = HierNetProj_beta,pmain = pmain)
+  model_size[1,"HierNetProj"] = compute_model_size(fitted_beta = HierNetProj_beta)
+  
+  #sprintr
+  print("SPRINTR")
+  start_time = Sys.time()
+  cv_sprintr = sprintr::cv.sprinter(x= x_train, y = y_train)
+  lambda_min_sprintr = cv_sprintr$lambda[cv_sprintr$ibest]
+  sprintr_fit = sprintr::cv.sprinter(x = x_train, y = y_train, lambda = lambda_min_sprintr)
+  sprintr_beta = rep(0,length(true_beta))
+  names(sprintr_beta) = names(true_beta)
+  main_sprintr = sprintr_fit$compact[sprintr_fit$compact[,1]==0,]
+  interac_sprintr = sprintr_fit$compact[sprintr_fit$compact[,1]!=0,]
+  sprintr_beta[main_sprintr[,2]] = main_sprintr[,3] 
+  sprintr_beta[paste(interac_sprintr[,1]  ,interac_sprintr[,2])] = interac_sprintr[,3]
+  sprintr_predict = predict(cv_sprintr, as.matrix(x_test))
+  end_time = Sys.time()
+  times_[1,"SPRINTR"] = as.numeric(end_time-start_time)
+  RMSE[1,"SPRINTR"] =  compute_RMSE(y_test,sprintr_predict)
+  MSH[1,"SPRINTR"] =  compute_MSH(true_beta = true_beta ,fitted_beta = sprintr_beta, main_effects = nb, pmain = pmain)
+  performance = eval_performance(true_beta = true_beta, fitted_beta = sprintr_beta)
+  sensitivity[1,"SPRINTR"] = performance$sensitivity
+  specificity[1,"SPRINTR"] = performance$specificity
+  AUC[1,"SPRINTR"] = performance$auc
+  main_coverage[1,"SPRINTR"] = compute_main_coverage(true_beta = true_beta, fitted_beta = sprintr_beta,pmain = pmain)
+  order2_coverage[1,"SPRINTR"] = compute_order2_coverage(true_beta = true_beta, fitted_beta = sprintr_beta,pmain = pmain)
+  main_exact_select[1,"SPRINTR"] = compute_main_exact_select(true_beta = true_beta, fitted_beta = sprintr_beta,pmain = pmain)
+  order2_exact_select[1,"SPRINTR"] = compute_order2_exact_select(true_beta = true_beta, fitted_beta = sprintr_beta,pmain = pmain)
+  model_size[1,"SPRINTR"] = compute_model_size(fitted_beta = sprintr_beta)
+  
+  
+  
+  betas = cbind(true_beta, oracle_beta, all_pair_lasso_beta, HdS_lasso_beta, ramp_beta, hiernet_beta, family_beta, pie_beta, HierNetProj_beta,sprintr_beta)
   
   return(list(RMSE = RMSE,
               MSH = MSH,
@@ -255,3 +314,4 @@ compare_algo_quadraGaussian = function(design_obj, output_obj){
               times_ = times_,
               betas = betas))
 }
+
