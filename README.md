@@ -8,6 +8,7 @@ The files:
 - HierarchicalDescalingChenetal2020.R contains the implementation of the method of Chen et al (2020): *An Easy-to-Implement Hierarchical Standardization for Variable Selection Under Strong Heredity Constraint. Journal of statistical theory and practice, 14(3), 1-32*
 - withdraw_proj.R $${X_jX_k}_{proj} = X_jX_k - P_{X}(X_jX_k)$$
 - compare_algo_functions.R is the file containing a function comparing several algorithms performing variable selection and prediction in a quadratic linear regression.
+-real_data_study.R contains analysis of the dataset *Communities and crime* of UCI.
 
 ## Data simulation: an example
 
