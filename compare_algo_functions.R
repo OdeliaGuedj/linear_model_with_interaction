@@ -251,9 +251,11 @@ compare_algo_quadraGaussian = function(design_obj, output_obj){
     hierNet::hierNet.path(scale(x_train,T,T),y_train, zz = as.matrix(xtilde_proj_train[,-c(1:pmain)]))
     ,scale(x_train,T,T),y_train, trace =0)$lamhat.1se
   HierNetProj_fit = hierNet::hierNet(scale(x_train,T,T),y_train,lam=lambda_min_HierNetProj,strong = T,zz = as.matrix(xtilde_proj_train[,-c(1:pmain)]), trace = 0)
-  HierNetProj_beta = c(HierNetProj_fit$bp - HierNetProj_fit$bn,
-                       sapply(1:dim(interac_names)[1],function(i) HierNetProj_fit$th[as.numeric(interac_names[i,1]),as.numeric(interac_names[i,2])]) ,
-                       diag(HierNetProj_fit$th))
+  theta = c(sapply(1:dim(interac_names)[1],function(i) HierNetProj_fit$th[as.numeric(interac_names[i,1]),as.numeric(interac_names[i,2])]) ,
+            diag(HierNetProj_fit$th))
+  gamma = HierNetProj_fit$bp - HierNetProj_fit$bn + 
+    solve(t(as.matrix(x_train))%*%as.matrix(x_train))%*%t(as.matrix(x_train)) %*% as.matrix(xtilde_train[,-c(1:pmain)]) %*% theta
+  HierNetProj_beta = c(gamma, theta)
   names(HierNetProj_beta) = c(1:pmain, interac_names[,3], quadra_names)
   HierNetProj_predict = predict(HierNetProj_fit,scale(x_test,T,T))
   end_time = Sys.time()
